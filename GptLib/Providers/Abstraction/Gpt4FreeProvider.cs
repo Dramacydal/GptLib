@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Nodes;
+﻿using System.Net;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace GptLib.Providers.Abstraction;
@@ -7,8 +8,7 @@ public abstract class Gpt4FreeProvider : AbstractProvider
 {
     protected override string ModelRole => "assistant";
 
-    protected override JsonObject CreatePayload(Conversation conversation, string modelName, GptSettings settings,
-        IUploadedFileCache? uploadedFileCache)
+    protected override JsonObject CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         JsonObject obj = new()
         {
@@ -16,16 +16,20 @@ public abstract class Gpt4FreeProvider : AbstractProvider
             ["model"] = modelName,
             // ["provider"] = Name,
             ["stream"] = true,
-            ["temperature"] = settings.Temperature,
         };
 
+        if (settings.Temperature > 0)
+            obj["temperature"] = settings.Temperature;
+
         var messages = new JsonArray();
-        if (!string.IsNullOrEmpty(SystemPrompt))
+        foreach (var instruction in settings.Instructions)
+        {
             messages.Add(new
             {
                 role = "system",
-                content = SystemPrompt,
+                content = instruction,
             });
+        }
 
         foreach (var entry in conversation.History)
         {
@@ -34,18 +38,9 @@ public abstract class Gpt4FreeProvider : AbstractProvider
 
             messages.Add(new
             {
-                role = entry.Role == "system" ? ModelRole : entry.Role,
-                content = entry.Question,
+                role = entry.Role == RoleType.Model ? ModelRole : "user",
+                content = entry.Text,
             });
-
-            if (!string.IsNullOrEmpty(entry.Answer))
-            {
-                messages.Add(new
-                {
-                    role = ModelRole,
-                    content = entry.Answer,
-                });
-            }
         }
 
         obj["messages"] = messages;
@@ -108,7 +103,7 @@ public abstract class Gpt4FreeProvider : AbstractProvider
         return text;
     }
     
-    public override UploadFileInfo UploadFile(string path, IUploadedFileCache? uploadedFileCache)
+    public override UploadFileInfo UploadFile(string path, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         throw new NotImplementedException();
     }

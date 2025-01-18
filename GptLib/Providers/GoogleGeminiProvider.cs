@@ -1,11 +1,12 @@
 ﻿using System.Net;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Web;
+using GptLib.Exceptions;
 using GptLib.Providers.Abstraction;
+using GptLib.Providers.GoogleGemini;
 
-namespace GptLib.Providers.GoogleGemini;
+namespace GptLib.Providers;
 
 public class GoogleGeminiProvider : AbstractProvider
 {
@@ -17,7 +18,7 @@ public class GoogleGeminiProvider : AbstractProvider
     public const string ModelGemini20ThinkingExp = "gemini-2.0-flash-thinking-exp-1219"; 
     public const string ModelLearnMl15ProExp = "learnlm-1.5-pro-experimental";
 
-    public GoogleGeminiProvider(string key, IWebProxy proxy)
+    public GoogleGeminiProvider(string key)
     {
         Name = "Google Gemini Official";
         Models =
@@ -37,7 +38,6 @@ public class GoogleGeminiProvider : AbstractProvider
         };
         NeedProxy = true;
         CanUpload = true;
-        Proxy = proxy;
     }
 
     protected override Uri PrepareUri(string modelName)
@@ -45,8 +45,7 @@ public class GoogleGeminiProvider : AbstractProvider
         return new Uri(base.PrepareUri(modelName).ToString().Replace("{model_name}", modelName));
     }
 
-    protected override JsonObject CreatePayload(Conversation conversation, string modelName, GptSettings settings,
-        IUploadedFileCache? uploadedFileCache)
+    protected override JsonObject CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         JsonObject obj = new();
 
@@ -60,13 +59,13 @@ public class GoogleGeminiProvider : AbstractProvider
             {
                 new
                 {
-                    text = entry.Question,
+                    text = entry.Text,
                 }
             };
 
             foreach (var file in entry.UploadedFiles)
             {
-                var uploadedFile = UploadFile(file, uploadedFileCache);
+                var uploadedFile = UploadFile(file, proxy, uploadedFileCache);
 
                 parts.Add(new
                 {
@@ -88,29 +87,14 @@ public class GoogleGeminiProvider : AbstractProvider
             
             history.Add(new
             {
-                role = "user",
+                role = entry.Role == RoleType.User ? "user" : "model",
                 parts = parts
             });
-
-            if (!string.IsNullOrEmpty(entry.Answer))
-            {
-                history.Add(new
-                {
-                    role = "model",
-                    parts = new List<object>()
-                    {
-                        new
-                        {
-                            text = entry.Answer,                        
-                        }
-                    }
-                });
-            }
         }
 
-        Settings geminiSettings = settings as Settings;
+        var geminiSettings = settings as Settings;
         
-        if (geminiSettings.SafetySettings.Count > 0)
+        if (geminiSettings?.SafetySettings?.Count > 0)
         {
             var safetyJson = new JsonArray();
             foreach (var (category, threshold) in geminiSettings.SafetySettings)
@@ -125,26 +109,21 @@ public class GoogleGeminiProvider : AbstractProvider
             obj["safetySettings"] = safetyJson;
         }
 
-        if (geminiSettings.Temperature > 0 || !string.IsNullOrEmpty(geminiSettings.ResponseMimeType))
+        if (settings.Temperature > 0 || !string.IsNullOrEmpty(geminiSettings?.ResponseMimeType))
         {
-            var generationConfig = new JsonObject()
-            {
-            };
+            var generationConfig = new JsonObject();
             
-            if (geminiSettings.Temperature > 0)
-                generationConfig["temperature"] = geminiSettings.Temperature;
-            if (!string.IsNullOrEmpty(geminiSettings.ResponseMimeType))
+            if (settings.Temperature > 0)
+                generationConfig["temperature"] = settings.Temperature;
+            if (!string.IsNullOrEmpty(geminiSettings?.ResponseMimeType))
                 generationConfig["responseMimeType"] = geminiSettings.ResponseMimeType;
             
             obj["generationConfig"] = generationConfig;
         }
 
-        if (geminiSettings.Instructions.Count > 0)
+        if (geminiSettings?.Instructions.Count > 0)
         {
-            JsonObject instructions = new()
-            {
-                ["role"] = this.SystemRole,
-            };
+            JsonObject instructions = new();
 
             JsonArray parts = new();
 
@@ -192,7 +171,8 @@ public class GoogleGeminiProvider : AbstractProvider
         var text = "";
         foreach (var candidate in obj["candidates"].AsArray())
         {
-            if (candidate["finish_reason"]?.ToString() == "finishReason")
+            var finishReason = candidate["finishReason"]?.ToString();
+            if (finishReason == "finishReason")
             {
                 return new()
                 {
@@ -200,11 +180,12 @@ public class GoogleGeminiProvider : AbstractProvider
                     Text = stringResponse,
                 };
             }
-            
+
+            if (finishReason == "SAFETY")
+                throw new SafetyException(candidate["safetyRatings"].ToJsonString());
+
             foreach (var part in candidate["content"]["parts"].AsArray())
-            {
                 text += part["text"];
-            }
         }
 
         return new()
@@ -214,9 +195,9 @@ public class GoogleGeminiProvider : AbstractProvider
         };
     }
 
-    public override UploadFileInfo UploadFile(string filePath, IUploadedFileCache? uploadedFileCache)
+    public override UploadFileInfo UploadFile(string filePath, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
-        var client = GetClient();
+        var client = GetClient(proxy);
 
         var info = new FileInfo(filePath);
 

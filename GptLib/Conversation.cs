@@ -4,6 +4,8 @@ public class Conversation
 {
     public Guid Guid { get; set; } = Guid.NewGuid();
 
+    public string UsageContext { get; set; } = "default";
+    
     public DateTime Date { get; set; } = DateTime.Now;
 
     public List<HistoryEntry> History { get; set; } = new();
@@ -28,5 +30,30 @@ public class Conversation
     public void RemoveLast()
     {
         History.RemoveAt(History.Count - 1);
+    }
+
+    public void RollbackLastQuestion()
+    {
+        var pos = GetFirstBefore(RoleType.User, History.Count);
+        if (pos != -1)
+            Shrink(pos);
+    }
+
+    public int GetFirstAfter(RoleType role, int index)
+    {
+        for (var i = index + 1; i < History.Count; i++)
+            if (History[i].Role == role)
+                return i;
+
+        return -1;
+    }
+
+    public int GetFirstBefore(RoleType role, int index)
+    {
+        for (var i = index - 1; i >= 0; --i)
+            if (History[i].Role == role)
+                return i;
+
+        return -1;
     }
 }
