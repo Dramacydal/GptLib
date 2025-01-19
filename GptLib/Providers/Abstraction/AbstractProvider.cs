@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -40,11 +41,12 @@ public abstract class AbstractProvider : IProvider
         return ub.Uri;
     }
 
-    protected abstract JsonObject CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache);
+    protected abstract Task<JsonObject> CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache);
 
-    protected abstract GptResponse ParseResponse(string stringResponse);
+    protected abstract Task<GptResponse> ParseResponse(Stream stream);
 
-    public GptResponse MakeRequest(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
+    public async Task<GptResponse> MakeRequest(Conversation conversation, string modelName, GptSettings settings,
+        IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         var client = GetClient(proxy);
 
@@ -53,20 +55,29 @@ public abstract class AbstractProvider : IProvider
         foreach (var header in Headers)
             client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
 
-        var json = JsonSerializer.Serialize(CreatePayload(conversation, modelName, settings, proxy, uploadedFileCache));
+        using var stream = new TextWriterTraceListener();
+
+        var json = await JsonSerialize(await CreatePayload(conversation, modelName, settings, proxy, uploadedFileCache));
 
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        // _lastRequestJson = json;
-
         var uri = PrepareUri(modelName);
-        var result = client.PostAsync(uri, content).Result;
-        var stringResponse = result.Content.ReadAsStringAsync().Result;
+        var result = await client.PostAsync(uri, content);
 
         if (result.StatusCode != HttpStatusCode.OK)
-            throw new Exception(stringResponse);
+            throw new Exception(await result.Content.ReadAsStringAsync());
 
-        return ParseResponse(stringResponse);
+        return await ParseResponse(await result.Content.ReadAsStreamAsync());
+    }
+
+    protected async Task<string> JsonSerialize(object obj)
+    {
+        using MemoryStream memoryStream = new MemoryStream();
+        await JsonSerializer.SerializeAsync(memoryStream, obj, obj.GetType());
+        memoryStream.Position = 0;
+     
+        using StreamReader streamReader = new StreamReader(memoryStream);
+        return await streamReader.ReadToEndAsync();
     }
 
     protected HttpClient GetClient(IWebProxy? proxy)
@@ -78,5 +89,5 @@ public abstract class AbstractProvider : IProvider
         return new HttpClient(handler);
     }
 
-    public abstract UploadFileInfo UploadFile(string path, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache);
+    public abstract Task<UploadFileInfo> UploadFile(string path, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache);
 }

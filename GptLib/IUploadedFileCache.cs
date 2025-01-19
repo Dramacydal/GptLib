@@ -2,7 +2,7 @@
 
 public interface IUploadedFileCache
 {
-    public UploadFileInfo? Load(UploadFileInfo fileInfo);
+    public Task<UploadFileInfo> Load(UploadFileInfo fileInfo);
 
-    void Store(UploadFileInfo file);
+    public Task Store(UploadFileInfo file);
 }

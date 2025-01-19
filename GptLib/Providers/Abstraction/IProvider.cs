@@ -4,7 +4,7 @@ namespace GptLib.Providers.Abstraction;
 
 public interface IProvider
 {
-    public GptResponse MakeRequest(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache);
+    public Task<GptResponse> MakeRequest(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache);
     
     public string Name { get; set; }
     

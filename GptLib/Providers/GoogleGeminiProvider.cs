@@ -45,7 +45,7 @@ public class GoogleGeminiProvider : AbstractProvider
         return new Uri(base.PrepareUri(modelName).ToString().Replace("{model_name}", modelName));
     }
 
-    protected override JsonObject CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
+    protected override async Task<JsonObject> CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         JsonObject obj = new();
 
@@ -65,7 +65,7 @@ public class GoogleGeminiProvider : AbstractProvider
 
             foreach (var file in entry.UploadedFiles)
             {
-                var uploadedFile = UploadFile(file, proxy, uploadedFileCache);
+                var uploadedFile = await UploadFile(file, proxy, uploadedFileCache);
 
                 parts.Add(new
                 {
@@ -147,9 +147,9 @@ public class GoogleGeminiProvider : AbstractProvider
         return obj;
     }
 
-    protected override GptResponse ParseResponse(string stringResponse)
+    protected override async Task<GptResponse> ParseResponse(Stream stream)
     {
-        var obj = JsonObject.Parse(stringResponse);
+        var obj = await JsonNode.ParseAsync(stream);
         if (obj["error"] != null)
         {
             return new()
@@ -177,7 +177,7 @@ public class GoogleGeminiProvider : AbstractProvider
                 return new()
                 {
                     Success = false,
-                    Text = stringResponse,
+                    Text = obj.ToJsonString(),
                 };
             }
 
@@ -195,7 +195,7 @@ public class GoogleGeminiProvider : AbstractProvider
         };
     }
 
-    public override UploadFileInfo UploadFile(string filePath, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
+    public override async Task<UploadFileInfo> UploadFile(string filePath, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         var client = GetClient(proxy);
 
@@ -213,7 +213,7 @@ public class GoogleGeminiProvider : AbstractProvider
             ModifyDate = info.LastWriteTime,
         };
 
-        var oldFile = uploadedFileCache?.Load(file);
+        var oldFile = await uploadedFileCache?.Load(file);
         if (oldFile != null)
             return oldFile;
 
@@ -223,7 +223,7 @@ public class GoogleGeminiProvider : AbstractProvider
             info.Length.ToString());
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-Goog-Upload-Header-Content-Type", mime);
 
-        var json = JsonSerializer.Serialize(new
+        var json = await JsonSerialize(new
         {
             file = new
             {
@@ -233,10 +233,10 @@ public class GoogleGeminiProvider : AbstractProvider
 
         var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-        var result = client
+        var result = await client
             .PostAsync(
                 "https://generativelanguage.googleapis.com/upload/v1beta/files?key=" +
-                HttpUtility.HtmlEncode(QueryParamteres["key"]), content).Result;
+                HttpUtility.HtmlEncode(QueryParamteres["key"]), content);
 
         if (result.StatusCode != HttpStatusCode.OK)
             throw new Exception("Get file upload url failed");
@@ -250,22 +250,21 @@ public class GoogleGeminiProvider : AbstractProvider
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-Goog-Upload-Offset", "0");
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-Goog-Upload-Command", "upload, finalize");
 
-        var content2 = new ByteArrayContent(File.ReadAllBytes(filePath));
+        var content2 = new ByteArrayContent(await File.ReadAllBytesAsync(filePath));
 
-        result = client.PostAsync(uploadUrls.First(), content2).Result;
+        result = await client.PostAsync(uploadUrls.First(), content2);
         if (result.StatusCode != HttpStatusCode.OK)
             throw new Exception("Failed to upload file");
 
-        var textData = result.Content.ReadAsStringAsync().Result;
-
-        var jsonObj = JsonObject.Parse(textData);
+        var jsonObj = await JsonNode.ParseAsync(await result.Content.ReadAsStreamAsync());
 
         var uploadedName = jsonObj["file"]["name"].ToString();
         file.UploadedName = uploadedName.Substring(uploadedName.IndexOf("/") + 1);
         file.Uri = jsonObj["file"]["uri"].ToString();
         file.ExpirationDate = jsonObj["file"]["expirationTime"].GetValue<DateTime>();
 
-        uploadedFileCache?.Store(file);
+        if (uploadedFileCache != null)
+            await uploadedFileCache.Store(file).ConfigureAwait(false);
 
         return file;
     }

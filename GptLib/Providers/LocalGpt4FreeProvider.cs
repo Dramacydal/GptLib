@@ -11,9 +11,10 @@ public class LocalGpt4FreeProvider : Gpt4FreeProvider
         Url = "http://localhost:1337/v1/chat/completions";
     }
 
-    protected override JsonObject CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
+    protected override async Task<JsonObject> CreatePayload(Conversation conversation, string modelName,
+        GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
-        var payload = base.CreatePayload(conversation, modelName, settings, proxy, uploadedFileCache);
+        var payload = await base.CreatePayload(conversation, modelName, settings, proxy, uploadedFileCache);
         payload["provider"] = Name;
 
         return payload;

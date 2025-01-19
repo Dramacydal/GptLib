@@ -22,7 +22,7 @@ public class GptClient
         _uploadedFileCache = uploadedFileCache;
     }
 
-    public GptResponse? AskQuestion(GptQuestion question, GptSettings settings)
+    public async Task<GptResponse?> AskQuestion(GptQuestion question, GptSettings settings)
     {
         if (string.IsNullOrEmpty(question.Text) && question.Files.Count == 0)
             return null;
@@ -37,7 +37,7 @@ public class GptClient
 
         try
         {
-            var response = Provider.MakeRequest(Conversation, Model, settings, Proxy, _uploadedFileCache);
+            var response = await Provider.MakeRequest(Conversation, Model, settings, Proxy, _uploadedFileCache);
             entry = Conversation.CreateEntry();
             entry.Time = DateTime.Now;
             entry.Error = !response.Success;

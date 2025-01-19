@@ -8,7 +8,7 @@ public abstract class Gpt4FreeProvider : AbstractProvider
 {
     protected override string ModelRole => "assistant";
 
-    protected override JsonObject CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
+    protected override async Task<JsonObject> CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         JsonObject obj = new()
         {
@@ -48,12 +48,13 @@ public abstract class Gpt4FreeProvider : AbstractProvider
         return obj;
     }
     
-    protected override GptResponse ParseResponse(string stringResponse)
+    protected override async Task<GptResponse> ParseResponse(Stream stream)
     {
+        using var r = new StreamReader(stream);
+        
         var text = "";
-        var lines = stringResponse.Split("\n", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var lines = (await r.ReadToEndAsync()).Split("\n", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        var first = true;
         foreach (var line in lines)
         {
             if (line.StartsWith("data: "))
@@ -103,7 +104,7 @@ public abstract class Gpt4FreeProvider : AbstractProvider
         return text;
     }
     
-    public override UploadFileInfo UploadFile(string path, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
+    public override Task<UploadFileInfo> UploadFile(string path, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         throw new NotImplementedException();
     }
