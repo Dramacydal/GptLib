@@ -27,11 +27,6 @@ public class Conversation
         History = History.Take(index).ToList();
     }
 
-    public void RemoveLast()
-    {
-        History.RemoveAt(History.Count - 1);
-    }
-
     public void RollbackLastQuestion()
     {
         var pos = GetFirstBefore(RoleType.User, History.Count);
@@ -56,4 +51,6 @@ public class Conversation
 
         return -1;
     }
+
+    public void Reset() => History.Clear();
 }
