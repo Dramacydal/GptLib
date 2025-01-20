@@ -1,5 +1,4 @@
 ﻿using System.Net;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Web;
 using GptLib.Exceptions;
@@ -45,12 +44,11 @@ public class GoogleGeminiProvider : AbstractProvider
         return new Uri(base.PrepareUri(modelName).ToString().Replace("{model_name}", modelName));
     }
 
-    protected override async Task<JsonObject> CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
+    protected override async Task<JsonObject> CreatePayload(History history, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         JsonObject obj = new();
-
-        var history = new JsonArray();
-        foreach (var entry in conversation.History)
+        var historyObj = new JsonArray();
+        foreach (var entry in history.Contents)
         {
             if (entry.Error)
                 continue;
@@ -85,7 +83,7 @@ public class GoogleGeminiProvider : AbstractProvider
             //     });
             // }
             
-            history.Add(new
+            historyObj.Add(new
             {
                 role = entry.Role == RoleType.User ? "user" : "model",
                 parts = parts
@@ -142,7 +140,7 @@ public class GoogleGeminiProvider : AbstractProvider
             obj["systemInstruction"] = instructions;
         }
 
-        obj["contents"] = history;
+        obj["contents"] = historyObj;
 
         return obj;
     }
@@ -155,7 +153,12 @@ public class GoogleGeminiProvider : AbstractProvider
             return new()
             {
                 Success = false,
-                Text = obj["error"]["message"].ToString(),
+                Answer = new()
+                {
+                    Error = true,
+                    Text = obj["error"]["message"].ToString(),
+                    Time = DateTime.Now,
+                }
             };
         }
 
@@ -164,7 +167,12 @@ public class GoogleGeminiProvider : AbstractProvider
             return new()
             {
                 Success = false,
-                Text = "Candidate field not found",
+                Answer = new()
+                {
+                    Error = true,
+                    Text = "Candidate field not found",
+                    Time = DateTime.Now,
+                }
             };
         }
 
@@ -177,7 +185,12 @@ public class GoogleGeminiProvider : AbstractProvider
                 return new()
                 {
                     Success = false,
-                    Text = obj.ToJsonString(),
+                    Answer = new()
+                    {
+                        Error = true,
+                        Text = obj.ToJsonString(),
+                        Time = DateTime.Now,
+                    }
                 };
             }
 
@@ -191,7 +204,12 @@ public class GoogleGeminiProvider : AbstractProvider
         return new()
         {
             Success = true,
-            Text = text,
+            Answer = new()
+            {
+                Error = false,
+                Text = text,
+                Time = DateTime.Now,
+            }
         };
     }
 
@@ -213,9 +231,12 @@ public class GoogleGeminiProvider : AbstractProvider
             ModifyDate = info.LastWriteTime,
         };
 
-        var oldFile = await uploadedFileCache?.Load(file);
-        if (oldFile != null)
-            return oldFile;
+        if (uploadedFileCache != null)
+        {
+            var oldFile = await uploadedFileCache.Load(file);
+            if (oldFile != null)
+                return oldFile;
+        }
 
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-Goog-Upload-Protocol", "resumable");
         client.DefaultRequestHeaders.TryAddWithoutValidation("X-Goog-Upload-Command", "start");

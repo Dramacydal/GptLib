@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Web;
+using GptLib.Exceptions;
 
 namespace GptLib.Providers.Abstraction;
 
@@ -41,23 +42,24 @@ public abstract class AbstractProvider : IProvider
         return ub.Uri;
     }
 
-    protected abstract Task<JsonObject> CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache);
+    protected abstract Task<JsonObject> CreatePayload(History history, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache);
 
     protected abstract Task<GptResponse> ParseResponse(Stream stream);
 
-    public async Task<GptResponse> MakeRequest(Conversation conversation, string modelName, GptSettings settings,
+    public async Task<GptResponse> MakeRequest(History history, string modelName, GptSettings settings,
         IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
+        if (!Models.Any(model => string.Equals(model, modelName, StringComparison.InvariantCultureIgnoreCase)))
+            throw new GptException($"Provider {GetType().Name} does not support model {modelName}");
+        
         var client = GetClient(proxy);
-
-        client.DefaultRequestHeaders.Add("Accept", "text/event-stream");
 
         foreach (var header in Headers)
             client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
 
         using var stream = new TextWriterTraceListener();
 
-        var json = await JsonSerialize(await CreatePayload(conversation, modelName, settings, proxy, uploadedFileCache));
+        var json = await JsonSerialize(await CreatePayload(history, modelName, settings, proxy, uploadedFileCache));
 
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 

@@ -8,11 +8,16 @@ public abstract class Gpt4FreeProvider : AbstractProvider
 {
     protected override string ModelRole => "assistant";
 
-    protected override async Task<JsonObject> CreatePayload(Conversation conversation, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
+    protected Gpt4FreeProvider()
+    {
+        Headers["Accept"] = "text/event-stream";
+    }
+
+    protected override async Task<JsonObject> CreatePayload(History history, string modelName, GptSettings settings, IWebProxy? proxy, IUploadedFileCache? uploadedFileCache)
     {
         JsonObject obj = new()
         {
-            ["conversation_id"] = conversation.Guid.ToString(),
+            // ["conversation_id"] = conversation.Guid.ToString(),
             ["model"] = modelName,
             // ["provider"] = Name,
             ["stream"] = true,
@@ -31,7 +36,7 @@ public abstract class Gpt4FreeProvider : AbstractProvider
             });
         }
 
-        foreach (var entry in conversation.History)
+        foreach (var entry in history.Contents)
         {
             if (entry.Error)
                 continue;
@@ -47,13 +52,14 @@ public abstract class Gpt4FreeProvider : AbstractProvider
 
         return obj;
     }
-    
+
     protected override async Task<GptResponse> ParseResponse(Stream stream)
     {
         using var r = new StreamReader(stream);
-        
+
         var text = "";
-        var lines = (await r.ReadToEndAsync()).Split("\n", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var lines = (await r.ReadToEndAsync()).Split("\n",
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var line in lines)
         {
@@ -64,10 +70,15 @@ public abstract class Gpt4FreeProvider : AbstractProvider
         return new GptResponse()
         {
             Success = true,
-            Text = text,
+            Answer = new()
+            {
+                Role = RoleType.Model,
+                Text = text,
+                Time = DateTime.Now,
+            },
         };
     }
-    
+
     private string ParseDataLine(string line)
     {
         if (!line.StartsWith("data: "))

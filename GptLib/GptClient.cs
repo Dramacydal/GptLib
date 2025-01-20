@@ -1,14 +1,14 @@
 ﻿using System.Net;
+using GptLib.Exceptions;
 using GptLib.Providers.Abstraction;
 
 namespace GptLib;
 
 public class GptClient
 {
-    public Conversation Conversation { get; set; } = new();
-    public string Model { get; set; } = "";
-
     public IProvider Provider { get; set; }
+    
+    public string ModelName { get; set; } = "";
     
     public IWebProxy? Proxy { get; set; }
 
@@ -22,39 +22,25 @@ public class GptClient
         _uploadedFileCache = uploadedFileCache;
     }
 
-    public async Task<GptResponse?> AskQuestion(GptQuestion question, GptSettings settings)
+    public async Task<GptResponse?> AskQuestion(GptQuestion question, History history, GptSettings settings)
     {
         if (string.IsNullOrEmpty(question.Text) && question.Files.Count == 0)
             return null;
 
-        Conversation.UsageContext = _usageContext;
+        var questionEntry = history.CreateEntry();
+        questionEntry.Time = DateTime.Now;
+        questionEntry.Role = RoleType.User;
+        questionEntry.Text = question.Text;
+        questionEntry.Tag = question.Tag;
+        questionEntry.UploadedFiles = question.Files;
 
-        var entry = Conversation.CreateEntry();
-        entry.Time = DateTime.Now;
-        entry.Role = RoleType.User;
-        entry.Text = question.Text;
-        entry.UploadedFiles = question.Files;
+        if (Provider == null)
+            throw new GptException("Provider not set");
+        
+        var res = await Provider.MakeRequest(history, ModelName, settings, Proxy, _uploadedFileCache);
 
-        try
-        {
-            var response = await Provider.MakeRequest(Conversation, Model, settings, Proxy, _uploadedFileCache);
-            entry = Conversation.CreateEntry();
-            entry.Time = DateTime.Now;
-            entry.Error = !response.Success;
-            entry.Role = RoleType.Model;
-            entry.Text = response.Text;
+        res.Question = questionEntry;
 
-            return response;
-        }
-        catch (Exception ex)
-        {
-            entry = Conversation.CreateEntry();
-            entry.Time = DateTime.Now;
-            entry.Error = true;
-            entry.Role = RoleType.Model;
-            entry.Text = ex.Message;
-
-            throw ex;
-        }
+        return res;
     }
 }
