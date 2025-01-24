@@ -74,7 +74,6 @@ public abstract class Gpt4FreeProvider : AbstractProvider
             {
                 Role = RoleType.Model,
                 Text = text,
-                Time = DateTime.Now,
             },
         };
     }

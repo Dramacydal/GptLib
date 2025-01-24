@@ -8,7 +8,7 @@ public class HistoryEntry
 
     public List<string> UploadedFiles { get; set; } = new();
 
-    public DateTime Time { get; set; }
+    public DateTime Time { get; set; } = DateTime.Now;
     
     public string Tag { get; set; }
 

@@ -6,14 +6,6 @@ public class History
 
     public int Length => _history.Count;
 
-    public HistoryEntry CreateEntry()
-    {
-        var entry = new HistoryEntry();
-        _history.Add(entry);
-
-        return entry;
-    }
-
     public History Copy()
     {
         var copy = new History();

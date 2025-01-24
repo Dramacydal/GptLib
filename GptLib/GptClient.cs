@@ -22,22 +22,34 @@ public class GptClient
         _uploadedFileCache = uploadedFileCache;
     }
 
-    public async Task<GptResponse?> AskQuestion(GptQuestion question, History history, GptSettings settings)
+    public async Task<GptResponse> AskQuestion(GptQuestion question, History history, GptSettings settings)
     {
-        if (string.IsNullOrEmpty(question.Text) && question.Files.Count == 0)
-            return null;
+        if (Provider == null)
+            throw new GptException("Provider not set");
 
-        var questionEntry = history.CreateEntry();
-        questionEntry.Time = DateTime.Now;
+        HistoryEntry questionEntry = new();
         questionEntry.Role = RoleType.User;
         questionEntry.Text = question.Text;
         questionEntry.Tag = question.Tag;
         questionEntry.UploadedFiles = question.Files;
 
-        if (Provider == null)
-            throw new GptException("Provider not set");
-        
+        var copyHistory = history.Copy();
+        copyHistory.Add([questionEntry]);
+
+        if (string.IsNullOrEmpty(question.Text) && question.Files.Count == 0)
+            return new()
+            {
+                Question = questionEntry,
+                Answer = new() { Error = true, Text = "Empty question", Role = RoleType.Model },
+                Success = false,
+            };
+
         var res = await Provider.MakeRequest(history, ModelName, settings, Proxy, _uploadedFileCache);
+        if (!res.Success)
+        {
+            questionEntry.Error = true;
+            res.Answer.Error = true;
+        }
 
         res.Question = questionEntry;
 

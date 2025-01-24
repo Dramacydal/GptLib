@@ -157,7 +157,7 @@ public class GoogleGeminiProvider : AbstractProvider
                 {
                     Error = true,
                     Text = obj["error"]["message"].ToString(),
-                    Time = DateTime.Now,
+                    Role = RoleType.Model,
                 }
             };
         }
@@ -171,7 +171,7 @@ public class GoogleGeminiProvider : AbstractProvider
                 {
                     Error = true,
                     Text = "Candidate field not found",
-                    Time = DateTime.Now,
+                    Role = RoleType.Model,
                 }
             };
         }
@@ -189,7 +189,7 @@ public class GoogleGeminiProvider : AbstractProvider
                     {
                         Error = true,
                         Text = obj.ToJsonString(),
-                        Time = DateTime.Now,
+                        Role = RoleType.Model,
                     }
                 };
             }
@@ -208,7 +208,7 @@ public class GoogleGeminiProvider : AbstractProvider
             {
                 Error = false,
                 Text = text,
-                Time = DateTime.Now,
+                Role = RoleType.Model,
             }
         };
     }
