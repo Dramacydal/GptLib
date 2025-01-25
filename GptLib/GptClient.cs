@@ -44,7 +44,7 @@ public class GptClient
                 Success = false,
             };
 
-        var res = await Provider.MakeRequest(history, ModelName, settings, Proxy, _uploadedFileCache);
+        var res = await Provider.MakeRequest(copyHistory, ModelName, settings, Proxy, _uploadedFileCache);
         if (!res.Success)
         {
             questionEntry.Error = true;
