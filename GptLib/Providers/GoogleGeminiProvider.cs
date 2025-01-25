@@ -119,13 +119,13 @@ public class GoogleGeminiProvider : AbstractProvider
             obj["generationConfig"] = generationConfig;
         }
 
-        if (geminiSettings?.Instructions.Count > 0)
+        if (settings?.Instructions.Count > 0)
         {
             JsonObject instructions = new();
 
             JsonArray parts = new();
 
-            foreach (var line in geminiSettings.Instructions)
+            foreach (var line in settings.Instructions)
             {
                 parts.Add(new
                 {
